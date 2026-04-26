@@ -1,31 +1,34 @@
 # DOCX to PDF Telegram Bot
 
-Production-ready Telegram-бот для маленького Linux VPS: пользователь отправляет `.docx`, бот конвертирует документ в PDF через LibreOffice headless и отправляет PDF обратно.
+Production-ready Telegram bot for a small Linux VPS: a user sends a `.docx` file, the bot downloads it, converts it to PDF with LibreOffice headless, sends the PDF back, and removes temporary files.
 
-Архитектура намеренно простая: Python 3.11+, aiogram 3.x, `asyncio.Queue`, один worker и одна конвертация LibreOffice одновременно. Docker, Redis, Celery и база данных не используются.
+[Русская версия](README.ru.md)
 
-## Возможности
+The architecture is intentionally simple: Python 3.11+, aiogram 3.x, `asyncio.Queue`, one worker, and one LibreOffice conversion at a time. No Docker, Redis, Celery, or database.
 
-- Принимает только `.docx`.
-- Ограничивает размер файла до 20 МБ.
-- Ставит задачи в очередь с лимитом 5.
-- Выполняет только одну конвертацию одновременно.
-- Для каждой задачи создает отдельную временную папку.
-- Для каждой конвертации создает отдельный профиль LibreOffice.
-- Удаляет временные файлы после завершения задачи.
-- Логирует ошибки в stdout/stderr для `journalctl`.
+## Features
 
-## 1. Создание бота через BotFather
+- Accepts only `.docx` files.
+- Limits input files to 20 MB.
+- Uses a bounded queue with `maxsize=5`.
+- Runs only one conversion at a time.
+- Creates a separate temporary directory for every job.
+- Uses a separate LibreOffice profile directory for every conversion.
+- Deletes temporary files after each job.
+- Logs errors to stdout/stderr for `journalctl`.
+- Preserves the original document name when sending the resulting PDF.
 
-1. Откройте Telegram и найдите `@BotFather`.
-2. Отправьте команду `/newbot`.
-3. Укажите имя бота.
-4. Укажите username бота, который заканчивается на `bot`.
-5. Скопируйте выданный токен. Его нужно сохранить в `.env` на сервере.
+## 1. Create a bot with BotFather
 
-Не публикуйте токен в GitHub, чатах, логах или README.
+1. Open Telegram and find `@BotFather`.
+2. Send `/newbot`.
+3. Choose a display name.
+4. Choose a username ending with `bot`.
+5. Copy the token and store it in `.env` on your server.
 
-## 2. Установка системных зависимостей на Ubuntu/Debian
+Do not publish the token in GitHub, chats, logs, or README files.
+
+## 2. Install system dependencies on Ubuntu/Debian
 
 ```bash
 sudo apt update
@@ -33,49 +36,49 @@ sudo apt install -y python3 python3-venv python3-pip libreoffice libreoffice-wri
 fc-cache -f -v
 ```
 
-Пакет `libreoffice-writer` нужен для конвертации DOCX. Шрифты важны для качества PDF: если на сервере нет шрифтов, использованных в документе, LibreOffice будет подставлять похожие, и верстка может отличаться от оригинала.
+`libreoffice-writer` is required for DOCX conversion. Fonts matter for PDF quality: if the server does not have the fonts used by the document, LibreOffice will substitute similar fonts, and the layout may differ from the original.
 
-## 3. Создание venv
+## 3. Create a venv
 
 ```bash
 cd /opt/docx-pdf-bot
 python3 -m venv venv
 ```
 
-## 4. Установка Python-зависимостей
+## 4. Install Python dependencies
 
 ```bash
 /opt/docx-pdf-bot/venv/bin/pip install --upgrade pip
 /opt/docx-pdf-bot/venv/bin/pip install -r requirements.txt
 ```
 
-## 5. Настройка `.env`
+## 5. Configure `.env`
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Файл должен содержать:
+The file must contain:
 
 ```env
 BOT_TOKEN=123456789:your_real_bot_token
 ```
 
-Файл `.env` добавлен в `.gitignore` и не должен попадать в репозиторий.
+`.env` is listed in `.gitignore` and must not be committed.
 
-## 6. Ручной запуск
+## 6. Run manually
 
 ```bash
 cd /opt/docx-pdf-bot
 /opt/docx-pdf-bot/venv/bin/python bot.py
 ```
 
-После запуска отправьте боту DOCX-файл до 20 МБ. Бот должен ответить: `Файл принят, конвертирую в PDF…`, затем прислать PDF.
+After startup, send the bot a DOCX file up to 20 MB. The bot should reply in Russian: `Файл принят, конвертирую в PDF…`, then send the PDF.
 
-## 7. Установка systemd service
+## 7. Install the systemd service
 
-Скопируйте проект в `/opt/docx-pdf-bot`, затем установите unit:
+Copy the project to `/opt/docx-pdf-bot`, then install the unit:
 
 ```bash
 sudo cp /opt/docx-pdf-bot/systemd/docx-pdf-bot.service /etc/systemd/system/docx-pdf-bot.service
@@ -84,47 +87,47 @@ sudo systemctl enable docx-pdf-bot
 sudo systemctl start docx-pdf-bot
 ```
 
-Проверка статуса:
+Check status:
 
 ```bash
 sudo systemctl status docx-pdf-bot
 ```
 
-## 8. Логи
+## 8. Logs
 
 ```bash
 journalctl -u docx-pdf-bot -f
 ```
 
-Если конвертация падает, подробности LibreOffice и traceback Python будут видны в логах.
+If conversion fails, LibreOffice diagnostics and Python tracebacks will be visible in the logs.
 
-## 9. Ограничения качества конвертации
+## 9. Conversion quality limits
 
-LibreOffice хорошо конвертирует большинство DOCX, но результат может отличаться от Microsoft Word. Возможные причины:
+LibreOffice converts most DOCX files well, but the result can differ from Microsoft Word. Common causes:
 
-- в документе используются отсутствующие на сервере шрифты;
-- есть сложные таблицы, плавающие элементы, SmartArt, макросы или нестандартные поля;
-- документ поврежден или создан не полностью совместимым редактором;
-- в DOCX есть внешние ссылки или объекты, которые LibreOffice не может корректно обработать.
+- the document uses fonts missing on the server;
+- the document contains complex tables, floating elements, SmartArt, macros, or unusual page settings;
+- the document is damaged or was created by a partially compatible editor;
+- the DOCX contains external links or embedded objects LibreOffice cannot process correctly.
 
-Для важных шаблонов проверяйте результат на реальных документах и при необходимости добавляйте нужные шрифты на сервер.
+For important templates, test real documents and install the required fonts on the server when needed.
 
-## 10. Почему важны шрифты
+## 10. Why fonts matter
 
-DOCX хранит ссылки на названия шрифтов, но не всегда включает сами файлы шрифтов. Если сервер не знает нужный шрифт, LibreOffice подставит другой. Из-за этого могут измениться переносы строк, размеры таблиц, номера страниц и общий вид PDF.
+DOCX files often store font names without embedding the font files themselves. If the server does not have a required font, LibreOffice substitutes another one. That can change line breaks, table sizes, page numbers, and the overall PDF layout.
 
-Минимальный набор шрифтов в инструкции выше закрывает большинство типичных документов. Для корпоративных шаблонов может потребоваться установка дополнительных лицензированных шрифтов.
+The minimal font set above covers many common documents. Corporate templates may require additional licensed fonts.
 
-## 11. Почему бот конвертирует по одному файлу за раз
+## 11. Why the bot converts one file at a time
 
-LibreOffice headless потребляет заметное количество CPU и RAM. На VPS с 2 GB RAM параллельные конвертации могут привести к зависаниям, OOM killer и поврежденным результатам. Поэтому бот использует очередь, но запускает только один процесс конвертации одновременно.
+LibreOffice headless can consume significant CPU and RAM. On a 2 GB RAM VPS, parallel conversions can cause stalls, OOM killer events, and unstable results. The bot therefore uses a queue but starts only one conversion process at a time.
 
-## Команды для деплоя из Git
+## Deployment from Git
 
 ```bash
 sudo mkdir -p /opt/docx-pdf-bot
 sudo chown "$USER":"$USER" /opt/docx-pdf-bot
-git clone <your-private-repo-url> /opt/docx-pdf-bot
+git clone <your-repo-url> /opt/docx-pdf-bot
 cd /opt/docx-pdf-bot
 python3 -m venv venv
 /opt/docx-pdf-bot/venv/bin/pip install --upgrade pip
