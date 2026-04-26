@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import shutil
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,16 +36,27 @@ class ConversionJob:
     bot: Bot
     chat_id: int
     document: Document
-    safe_name: str
+    input_name: str
+    output_name: str
 
 
 def sanitize_filename(filename: str | None) -> str:
-    name = Path(filename or "document.docx").name
+    name = unicodedata.normalize("NFKC", Path(filename or "document.docx").name)
     stem = Path(name).stem
-    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-")
+    safe_chars: list[str] = []
+    for char in stem:
+        if char.isalnum() or char in {" ", ".", "_", "-"}:
+            safe_chars.append(char)
+        else:
+            safe_chars.append("_")
+    stem = "".join(safe_chars).strip(" ._-")
     if not stem:
         stem = "document"
     return f"{stem[:80]}.docx"
+
+
+def pdf_filename_from_docx(filename: str) -> str:
+    return f"{Path(filename).stem}.pdf"
 
 
 def is_docx_document(document: Document) -> bool:
@@ -63,7 +74,7 @@ async def convert_worker() -> None:
         temp_dir: Path | None = None
         try:
             temp_dir = Path(tempfile.mkdtemp(prefix="docx_pdf_bot_"))
-            input_path = temp_dir / job.safe_name
+            input_path = temp_dir / job.input_name
 
             await job.bot.download(job.document, destination=input_path)
 
@@ -75,7 +86,7 @@ async def convert_worker() -> None:
 
             await job.bot.send_document(
                 chat_id=job.chat_id,
-                document=FSInputFile(pdf_path),
+                document=FSInputFile(pdf_path, filename=job.output_name),
                 caption="Готово. PDF-файл во вложении.",
             )
         except asyncio.CancelledError:
@@ -135,12 +146,14 @@ async def document_handler(message: Message) -> None:
         await message.answer("Сервер занят. Попробуйте отправить файл позже.")
         return
 
+    input_name = sanitize_filename(document.file_name)
     queue.put_nowait(
         ConversionJob(
             bot=message.bot,
             chat_id=message.chat.id,
             document=document,
-            safe_name=sanitize_filename(document.file_name),
+            input_name=input_name,
+            output_name=pdf_filename_from_docx(input_name),
         )
     )
     await message.answer("Файл принят, конвертирую в PDF…")
