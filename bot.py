@@ -19,10 +19,14 @@ from config import (
     MAX_FILE_SIZE_MB,
     QUEUE_MAXSIZE,
 )
-from converter import ConversionError, convert_docx_to_pdf
+from converter import ConversionError, convert_word_to_pdf
 
 
+ALLOWED_EXTENSIONS = {".doc", ".docx"}
 ALLOWED_MIME_TYPES = {
+    "application/msword",
+    "application/vnd.ms-word",
+    "application/x-msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/octet-stream",
 }
@@ -42,6 +46,9 @@ class ConversionJob:
 
 def sanitize_filename(filename: str | None) -> str:
     name = unicodedata.normalize("NFKC", Path(filename or "document.docx").name)
+    suffix = Path(name).suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        suffix = ".docx"
     stem = Path(name).stem
     safe_chars: list[str] = []
     for char in stem:
@@ -52,16 +59,16 @@ def sanitize_filename(filename: str | None) -> str:
     stem = "".join(safe_chars).strip(" ._-")
     if not stem:
         stem = "document"
-    return f"{stem[:80]}.docx"
+    return f"{stem[:80]}{suffix}"
 
 
-def pdf_filename_from_docx(filename: str) -> str:
+def pdf_filename_from_word(filename: str) -> str:
     return f"{Path(filename).stem}.pdf"
 
 
-def is_docx_document(document: Document) -> bool:
+def is_word_document(document: Document) -> bool:
     filename = document.file_name or ""
-    if Path(filename).suffix.lower() != ".docx":
+    if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
         return False
     if document.mime_type and document.mime_type not in ALLOWED_MIME_TYPES:
         return False
@@ -79,7 +86,7 @@ async def convert_worker() -> None:
             await job.bot.download(job.document, destination=input_path)
 
             pdf_path = await asyncio.to_thread(
-                convert_docx_to_pdf,
+                convert_word_to_pdf,
                 input_path,
                 CONVERT_TIMEOUT_SECONDS,
             )
@@ -92,7 +99,7 @@ async def convert_worker() -> None:
         except asyncio.CancelledError:
             raise
         except (ConversionError, Exception):
-            logging.exception("Failed to process DOCX conversion job")
+            logging.exception("Failed to process Word conversion job")
             await job.bot.send_message(
                 chat_id=job.chat_id,
                 text=(
@@ -110,7 +117,7 @@ async def on_startup() -> None:
     global queue, worker_task
     queue = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
     worker_task = asyncio.create_task(convert_worker())
-    logging.info("DOCX to PDF bot started")
+    logging.info("Word to PDF bot started")
 
 
 async def on_shutdown() -> None:
@@ -120,12 +127,12 @@ async def on_shutdown() -> None:
             await worker_task
         except asyncio.CancelledError:
             pass
-    logging.info("DOCX to PDF bot stopped")
+    logging.info("Word to PDF bot stopped")
 
 
 async def start_handler(message: Message) -> None:
     await message.answer(
-        "Отправьте DOCX-файл до 20 МБ, и я конвертирую его в PDF."
+        "Отправьте DOC или DOCX-файл до 20 МБ, и я конвертирую его в PDF."
     )
 
 
@@ -134,8 +141,8 @@ async def document_handler(message: Message) -> None:
     if document is None:
         return
 
-    if not is_docx_document(document):
-        await message.answer("Поддерживаются только файлы DOCX.")
+    if not is_word_document(document):
+        await message.answer("Поддерживаются только файлы DOC и DOCX.")
         return
 
     if document.file_size and document.file_size > MAX_FILE_SIZE_BYTES:
@@ -153,7 +160,7 @@ async def document_handler(message: Message) -> None:
             chat_id=message.chat.id,
             document=document,
             input_name=input_name,
-            output_name=pdf_filename_from_docx(input_name),
+            output_name=pdf_filename_from_word(input_name),
         )
     )
     await message.answer("Файл принят, конвертирую в PDF…")

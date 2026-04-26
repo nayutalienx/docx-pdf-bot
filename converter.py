@@ -9,12 +9,15 @@ class ConversionError(RuntimeError):
     pass
 
 
-def convert_docx_to_pdf(input_path: Path, timeout: int = 120) -> Path:
+ALLOWED_EXTENSIONS = {".doc", ".docx"}
+
+
+def convert_word_to_pdf(input_path: Path, timeout: int = 120) -> Path:
     input_path = input_path.resolve()
     if not input_path.is_file():
         raise ConversionError(f"Input file does not exist: {input_path}")
-    if input_path.suffix.lower() != ".docx":
-        raise ConversionError("Input file must have .docx extension")
+    if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        raise ConversionError("Input file must have .doc or .docx extension")
 
     out_dir = input_path.parent
 
@@ -61,3 +64,7 @@ def convert_docx_to_pdf(input_path: Path, timeout: int = 120) -> Path:
         )
 
     return pdf_path
+
+
+def convert_docx_to_pdf(input_path: Path, timeout: int = 120) -> Path:
+    return convert_word_to_pdf(input_path, timeout)
