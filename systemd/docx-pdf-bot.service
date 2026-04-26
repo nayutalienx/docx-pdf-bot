@@ -1,0 +1,17 @@
+[Unit]
+Description=DOCX to PDF Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/docx-pdf-bot
+ExecStart=/opt/docx-pdf-bot/venv/bin/python /opt/docx-pdf-bot/bot.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/docx-pdf-bot/.env
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
